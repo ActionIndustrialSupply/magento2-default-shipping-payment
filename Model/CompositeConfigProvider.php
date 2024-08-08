@@ -17,7 +17,7 @@ class CompositeConfigProvider implements ConfigProviderInterface
     /**
      * ScopeConfigInterface.
      */
-    private $scopeConfig;
+    private ScopeConfigInterface $scopeConfig;
 
     /**
      * @param ScopeConfigInterface $scopeConfig
