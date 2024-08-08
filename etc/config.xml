@@ -3,12 +3,12 @@
     <default>
         <hs_default_shipping_payment>
             <shipping>
-                <enabled>1</enabled>
+                <enabled>0</enabled>
                 <autoselect_method/>
                 <fallback_method>first</fallback_method>
             </shipping>
             <payment>
-                <enabled>1</enabled>
+                <enabled>0</enabled>
                 <autoselect_method/>
                 <fallback_method>first</fallback_method>
             </payment>
