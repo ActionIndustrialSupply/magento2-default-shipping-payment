@@ -15,7 +15,7 @@ class Register implements ObserverInterface
     /**
      * @var \HS\All\Helper\Data
      */
-    protected $helper;
+    protected \HS\All\Helper\Data $helper;
 
     /**
      * @param \HS\All\Helper\Data $helper
