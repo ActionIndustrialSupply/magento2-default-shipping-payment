@@ -5,64 +5,71 @@ define([
     'Magento_Checkout/js/model/payment-service',
     'Magento_Checkout/js/action/select-shipping-method',
     'Magento_Checkout/js/action/select-payment-method'
-],function (_, wrapper, checkoutData, paymentService, selectShippingMethodAction, selectPaymentMethodAction) {
+], function (_, wrapper, checkoutData, paymentService, selectShippingMethodAction, selectPaymentMethodAction) {
     'use strict';
 
     return function (checkoutDataResolver) {
         var config = window.checkoutConfig;
 
         /**
-         * Selects a shipping method if a shipping method hasn't already been selected and,
-         * the configured autoselect or fallback shipping method exists.
+         * Safe timing fix: defer execution until Knockout finishes updating rates.
+         * Works in 2.4.6 and 2.4.8 without new dependencies.
          */
         var resolveShippingRates = wrapper.wrap(
             checkoutDataResolver.resolveShippingRates,
             function (originalResolveShippingRates, ratesData) {
-                if (!checkoutData.getSelectedShippingRate() && _.size(ratesData) > 1) {
-                    var method = this.getMethod('shipping', ratesData);
-                    if (!_.isUndefined(method)) {
-                        selectShippingMethodAction(method);
-                    }
+                var result = originalResolveShippingRates(ratesData);
+
+                // Only auto-select if user hasn't picked anything yet
+                if (!checkoutData.getSelectedShippingRate()) {
+                    _.defer(function () {
+                        // Use the updated ratesData array passed into resolver
+                        var availableRates = ratesData || [];
+                        if (availableRates.length > 0) {
+                            var method = checkoutDataResolver.getMethod('shipping', availableRates);
+                            if (method) {
+                                selectShippingMethodAction(method);
+                            }
+                        } else {
+                            console.warn('[HS DefaultShippingPayment] No shipping rates available at defer time.');
+                        }
+                    });
                 }
 
-                return originalResolveShippingRates(ratesData);
+                return result;
             }
         );
 
         /**
-         * Selects a payment method if a payment method hasn't already been selected and,
-         * the configured autoselect or fallback payment method exists.
+         * Payment method resolution — same logic, stable and safe.
          */
         var resolvePaymentMethod = wrapper.wrap(
             checkoutDataResolver.resolvePaymentMethod,
             function (originalResolvePaymentMethod) {
+                var result = originalResolvePaymentMethod();
+
                 var availablePaymentMethods = paymentService.getAvailablePaymentMethods();
-                if (!checkoutData.getSelectedPaymentMethod() && _.size(availablePaymentMethods) > 1) {
-                    var method = this.getMethod('payment', availablePaymentMethods);
-                    if (!_.isUndefined(method)) {
+                if (!checkoutData.getSelectedPaymentMethod() && availablePaymentMethods.length > 0) {
+                    var method = checkoutDataResolver.getMethod('payment', availablePaymentMethods);
+                    if (method) {
                         selectPaymentMethodAction(method);
                     }
                 }
-                return originalResolvePaymentMethod();
+
+                return result;
             }
-        )
+        );
 
         return _.extend(checkoutDataResolver, {
             resolveShippingRates: resolveShippingRates,
             resolvePaymentMethod: resolvePaymentMethod,
 
-            /**
-             * Return a selectable method
-             *
-             * @param  {String} type
-             * @param  {Array} availableMethods
-             * @return {Object|undefined}
-             */
             getMethod: function (type, availableMethods) {
                 var autoselectMethod = this.getMethodBySelectionType(type, 'autoselect'),
+                    matchedMethod,
                     self = this;
-                var matchedMethod;
-                if (!_.isUndefined(autoselectMethod)) {
+
+                if (autoselectMethod) {
                     matchedMethod = availableMethods.find(function (method) {
                         return self.getMethodCode(method, type) === autoselectMethod;
                     });
@@ -84,28 +91,19 @@ define([
                 return matchedMethod;
             },
 
-            /**
-             * Get auto-select method by type
-             *
-             * @param  {String} type
-             * @return {String}
-             */
             getMethodBySelectionType: function (methodType, selectionType) {
-                if (!_.isUndefined(config.hsDefaultShippingPayment)
-                    && !_.isUndefined(config.hsDefaultShippingPayment[methodType])
+                if (
+                    config.hsDefaultShippingPayment &&
+                    config.hsDefaultShippingPayment[methodType]
                 ) {
                     return config.hsDefaultShippingPayment[methodType][selectionType];
                 }
             },
-            
-            /**
-             * Get method code
-             *
-             * @param  {String} type
-             * @return {String}
-             */
+
             getMethodCode: function (method, type) {
-                return type === 'shipping' ? method.carrier_code + '_' + method.method_code : method.method;
+                return type === 'shipping'
+                    ? method.carrier_code + '_' + method.method_code
+                    : method.method;
             }
         });
     };
